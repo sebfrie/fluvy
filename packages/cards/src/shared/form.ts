@@ -312,7 +312,8 @@ export const sectionField = (
 
 /**
  * A form with only the items `keep` takes, asked of every row and every field: a row it refuses goes whole, and a row
- * that loses one of its fields keeps the other on its own line.
+ * that loses one of its fields keeps the other on its own line. A section keeps its title over the fields it has left,
+ * and goes where it has none: what stays of it is never spilled into the form around it.
  */
 export function pickFields(
   schema: readonly HaFormSchemaItem[],
@@ -322,7 +323,13 @@ export function pickFields(
     if (!keep(item)) return [];
     if (!item.schema) return [item];
     const inner = pickFields(item.schema, keep);
-    if (inner.length === item.schema.length) return [item];
+    // unchanged only where every item is its own: a row that lost a field counts one, as the row did
+    if (
+      inner.length === item.schema.length &&
+      inner.every((kept, at) => kept === item.schema?.[at])
+    )
+      return [item];
+    if (item.type === 'expandable') return inner.length ? [{ ...item, schema: inner }] : [];
     return inner;
   });
 }

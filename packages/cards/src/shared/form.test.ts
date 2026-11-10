@@ -11,6 +11,7 @@ import {
   formLabels,
   onlyWhen,
   pickFields,
+  sectionField,
   selectField,
   textField,
   toneField,
@@ -156,6 +157,39 @@ describe('a form that shows only what can act', () => {
       'title',
       'live_update',
     ]);
+  });
+
+  it('keeps a section’s title over the fields it has left, and drops a section left with none', () => {
+    const sections: HaFormSchemaItem[] = [
+      selectField('variant', ['full', 'compact']),
+      sectionField('appliance.section_show', [
+        boolField('show_hero'),
+        onlyWhen(full, boolField('show_rows')),
+      ]),
+      sectionField('appliance.section_plug', [onlyWhen(full, boolField('show_icon'))]),
+    ];
+    // a section losing one of its fields keeps the other under its title: never spilled into the form around it
+    expect(shape(visibleFields(sections, { variant: 'compact' }))).toEqual([
+      'variant',
+      ['show_hero'],
+    ]);
+    expect(visibleFields(sections, { variant: 'compact' })[1]).toMatchObject({
+      type: 'expandable',
+      title: 'What it shows',
+    });
+    expect(shape(visibleFields(sections, { variant: 'full' }))).toEqual([
+      'variant',
+      ['show_hero', 'show_rows'],
+      ['show_icon'],
+    ]);
+    // a row in it that loses a field leaves its other alone, even where the section counts as many items as before
+    const row: HaFormSchemaItem[] = [
+      sectionField('appliance.section_show', [
+        fieldRow(boolField('show_hero'), onlyWhen(full, boolField('show_rows'))),
+        boolField('show_icon'),
+      ]),
+    ];
+    expect(shape(visibleFields(row, { variant: 'compact' }))).toEqual([['show_hero', 'show_icon']]);
   });
 
   it('hands Home Assistant’s form no function: every `when` stays behind', () => {

@@ -5,6 +5,13 @@ and the versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- A section of a card's editor keeps its title over the fields it has left where one of them does not apply, and
+  goes only where none does: it spilled every field into the form around it. The appliance card's "What it shows"
+  spilled on every appliance but a PetKit feeder, its "Reminders" on every one but a pet device, and the Chart section
+  of the Sensor, Energy, Energy usage, Production, Chart and History bars cards on every card.
+
 ## [1.18.0] — 2026-11-09
 
 ### Visible on upgrade

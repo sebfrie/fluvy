@@ -1,5 +1,11 @@
 // @vitest-environment happy-dom
-import { CHART_DEFAULTS, setChartDefaults, type HassEntity, type HomeAssistant } from '@fluvy/core';
+import {
+  CHART_DEFAULTS,
+  setChartDefaults,
+  type HaFormSchemaItem,
+  type HassEntity,
+  type HomeAssistant,
+} from '@fluvy/core';
 import { afterEach, describe, expect, it } from 'vitest';
 import { chartHeight } from '../chart-family.js';
 import { familiesDefined } from '../index.js';
@@ -756,9 +762,12 @@ describe('the Chart card’s editor', () => {
   });
 
   it('offers how far apart a line’s points stand only where a series reads the recorder, and no step finer than its statistics come', () => {
+    // the field where the form shows it: in the chart's section, which keeps its title over what it has left
+    const fields = (form: readonly HaFormSchemaItem[]): HaFormSchemaItem[] =>
+      form.flatMap((item) => (item.schema ? fields(item.schema) : [item]));
     const steps = (config: Record<string, unknown>): string[] =>
       (
-        visibleFields(FluvyChartCard.getConfigForm().schema, config, house()).find(
+        fields(visibleFields(FluvyChartCard.getConfigForm().schema, config, house())).find(
           (field) => field.name === 'points',
         )?.selector as { select: { options: { value: string }[] } } | undefined
       )?.select.options.map((o) => o.value) ?? [];
