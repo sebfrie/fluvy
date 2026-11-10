@@ -27,7 +27,7 @@ if (!customElements.get('fluvy-heading-card'))
 /*
  * Issue #47's reporter's design, as the reporter drew it (`issue-images/i47-mockup.png`, 1536 wide): "Großgeräte" —
  * the fridge in operation, the dishwasher rinsing its Eco programme, the washer and the dryer at work, the oven heating
- * up, the hob with its first zone on, the air fryer cooking, the coffee machine ready — over "Kleine Geräte", five
+ * up, the hob with its first zone on, the air fryer cooking, the coffee machine ready — over "Kleingeräte", five
  * small appliances on their plugs, all off. The same thirteen appliances in the same states, in German, at noon (the
  * reporter's oven ends at 12:45 and the last coffee was at 08:14), on the page's width; a German house's ids, each one
  * this sheet's own. Drawn beside the image at `?sheet=appliances-mockup&lang=de&width=1504` in a lavender palette
@@ -579,7 +579,7 @@ export const sheet: SheetSpec = {
       cards: [
         { ...heading('Großgeräte', 'fluvy:dishwasher', 'Alle Geräte'), cols: 60 },
         ...LARGE_CARDS.map((config) => ({ ...config, cols: 15 })),
-        { ...heading('Kleine Geräte', 'plug', 'Alle anzeigen'), cols: 60 },
+        { ...heading('Kleingeräte', 'plug', 'Alle anzeigen'), cols: 60 },
         ...SMALL_CARDS.map((config) => ({ ...config, cols: 12 })),
       ],
     } satisfies FrameSpec,

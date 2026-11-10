@@ -491,7 +491,7 @@ check(
     JSON.stringify(links) ===
       JSON.stringify([
         ['Großgeräte', '/fluvy-home/appliances'],
-        ['Kleine Geräte', '/fluvy-home/appliances'],
+        ['Kleingeräte', '/fluvy-home/appliances'],
       ]),
     JSON.stringify(links),
   );
