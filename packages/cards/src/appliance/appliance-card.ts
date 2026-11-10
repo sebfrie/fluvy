@@ -16,6 +16,7 @@ import {
   type HassEntity,
   type HomeAssistant,
   type KeyOf,
+  type LovelaceCardConfig,
   type LovelaceConfigForm,
   type LovelaceGridOptions,
   type MessageKey,
@@ -84,6 +85,7 @@ import {
   entityField,
   fieldRow,
   iconField,
+  listed,
   nameField,
   nameIconFields,
   numberField,
@@ -164,6 +166,7 @@ import {
   applianceDevices,
   APPLIANCE_READOUTS,
   KIND_DEFAULTS,
+  unloads,
   type ApplianceKind,
   type ApplianceReadout,
   type Hero,
@@ -1482,9 +1485,13 @@ export class FluvyApplianceCard extends Card<ApplianceCardConfig> {
     'scan',
   ]);
   static override lists: readonly RowsListSpec[] = [
-    rowsList('rows', 'appliance.editor_rows'),
-    // a pet device's tiles, said as its rows are
-    { ...rowsList('tiles', 'option.tiles'), when: (data, hass) => petCard(data, hass) },
+    // the whole card's rows
+    { ...rowsList('rows', 'appliance.editor_rows'), when: laidOut('full') },
+    // a pet device's tiles, said as its rows are: the whole card's hero, the compact card's readouts
+    {
+      ...rowsList('tiles', 'option.tiles'),
+      when: (data, hass) => laidOut('full', 'compact')(data) && petCard(data, hass),
+    },
     {
       key: 'sensors',
       title: 'appliance.editor_sensors',
@@ -1492,6 +1499,8 @@ export class FluvyApplianceCard extends Card<ApplianceCardConfig> {
       keys: ['entity', 'name'],
       schema: [entityField(undefined, 'entity'), nameField()],
       own: OWN,
+      // the compact card's readouts, after its own
+      when: laidOut('compact'),
     },
     {
       key: 'maintenance',
@@ -1501,6 +1510,7 @@ export class FluvyApplianceCard extends Card<ApplianceCardConfig> {
       computeLabel: (schema) =>
         schema.name === 'key' ? editorWord('appliance.editor_key') : undefined,
       picker: reminderPicker(),
+      when: forAppliance(({ found }, data) => reminds(found, data)),
       schema: [
         reminderPicker(),
         fieldRow(textField('name'), iconField()),
@@ -1512,6 +1522,8 @@ export class FluvyApplianceCard extends Card<ApplianceCardConfig> {
     {
       key: 'zones',
       title: 'appliance.editor_zones',
+      // a fridge's compartments, a hob's plates
+      when: forAppliance(({ hero }) => hero === 'cold' || hero === 'hob'),
       domains: ['number', 'climate', 'select', 'sensor'],
       keys: ['entity', 'name', 'icon', 'color', 'tap_action', 'hold_action'],
       schema: [
@@ -1597,6 +1609,7 @@ export class FluvyApplianceCard extends Card<ApplianceCardConfig> {
     return {
       drinks: optionsOf(state).map((value) => ({ value, label: optionWord(hass, state, value) })),
       confirm: confirmChoices(confirmable(c, hass)),
+      controls: controlChoices(c, hass),
       role: rolesOffered(
         found?.verdict && 'kind' in found.verdict ? found.verdict.kind : 'appliance',
         c.roles,
@@ -1613,93 +1626,261 @@ export class FluvyApplianceCard extends Card<ApplianceCardConfig> {
         entityField(undefined, 'entity', false),
         fieldRow(kindField(), selectField('variant', APPLIANCE_VARIANTS)),
         nameIconFields(),
-        fieldRow(
-          showIconField(),
-          choiceField('unit', [
-            ['both', 'appliance.o_both_units'],
-            ['main', 'appliance.o_main_unit'],
-            ['sub', 'appliance.o_sub_unit'],
-          ]),
-        ),
-        fieldRow(
-          choiceField('picture', [
-            ['art', 'appliance.o_picture'],
-            ['icon', 'appliance.o_icon'],
-            option('none'),
-          ]),
-          textField('image'),
-        ),
-        onlyWhen(({ picture }) => picture !== 'none', pictureMinField()),
-        fieldRow(boolField('show_power'), actionField('power_action')),
-        boolField('show_notify'),
+        // the head: the whole card's and the row's picture and round, the compact and ring heads' circle
+        sectionField('appliance.section_head', [
+          onlyWhen(laidOut('compact', 'ring'), showIconField()),
+          onlyWhen(
+            laidOut('full', 'row'),
+            choiceField('picture', [
+              ['art', 'appliance.o_picture'],
+              ['icon', 'appliance.o_icon'],
+              option('none'),
+            ]),
+          ),
+          // a photo of one's own stands in for the drawing, never for the circle
+          onlyWhen(
+            (data) => laidOut('full', 'row')(data) && (data['picture'] ?? 'art') === 'art',
+            textField('image'),
+          ),
+          onlyWhen(
+            (data) => laidOut('full', 'row')(data) && data['picture'] !== 'none',
+            pictureMinField(),
+          ),
+          onlyWhen(
+            laidOut('full', 'row'),
+            fieldRow(
+              boolField('show_power'),
+              onlyWhen(({ show_power }) => show_power !== false, actionField('power_action')),
+            ),
+          ),
+          // the bell beside the hero's figures: what finishes, where the whole card says its figures
+          onlyWhen(
+            forAppliance(({ hero }, data) => laidOut('full')(data) && FINISHES.includes(hero)),
+            boolField('show_notify'),
+          ),
+        ]),
+        // the kind's hero, then its rows or its readouts: each where its kind and its layout draw it
         sectionField('appliance.section_show', [
-          fieldRow(boolField('show_hero'), boolField('show_progress')),
-          fieldRow(
+          onlyWhen(
+            forAppliance(
+              ({ hero }, data) =>
+                (laidOut('full')(data) && FIGURES.includes(hero)) ||
+                (laidOut('compact')(data) && hero === 'pet'),
+            ),
+            boolField('show_hero'),
+          ),
+          onlyWhen(
+            forAppliance(
+              ({ hero }, data) =>
+                (laidOut('full')(data) && (hero === 'cycle' || hero === 'heat')) ||
+                (laidOut('compact')(data) && hero === 'cycle'),
+            ),
+            boolField('show_progress'),
+          ),
+          onlyWhen(
+            forAppliance(
+              ({ kind, hero }, data) =>
+                laidOut('full', 'compact')(data) &&
+                hero === 'cycle' &&
+                KIND_DEFAULTS[kind].steps.length > 0 &&
+                data['show_progress'] !== false,
+            ),
             choiceField('progress_style', [
               option('auto'),
               option('bar'),
               ['steps', 'appliance.o_steps'],
             ]),
+          ),
+          onlyWhen(
+            forAppliance(({ hero }) => hero === 'cycle' || hero === 'heat'),
             choiceField('time', [
               ['both', 'appliance.o_both'],
               ['left', 'appliance.o_left'],
               ['end', 'appliance.o_end'],
             ]),
           ),
-          fieldRow(
+          onlyWhen(
+            forAppliance(
+              ({ hero }, data) => laidOut('full')(data) && (hero === 'cold' || hero === 'hob'),
+            ),
             boolField('show_zones'),
+          ),
+          onlyWhen(
+            forAppliance(
+              ({ hero, found }, data, hass) =>
+                laidOut('full')(data) &&
+                ((hero === 'cold' && data['show_zones'] !== false) ||
+                  (hero === 'heat' &&
+                    (!found ||
+                      targetSetter(hass, found.platform, found.entities.roles) !== undefined))),
+            ),
             choiceField('setpoint_style', [
               ['readout', 'appliance.o_readout'],
               ['stepper', 'appliance.o_stepper'],
             ]),
           ),
-          fieldRow(boolField('show_drinks'), boolField('show_rows')),
-          orderedField('drinks', [], { custom: true }),
-          choiceField('row_values', [
-            ['inline', 'appliance.o_inline'],
-            ['end', 'appliance.o_at_end'],
-            option('plain'),
-          ]),
-          orderedField(
-            'readouts',
-            APPLIANCE_READOUTS.map((key) => ({ value: key, label: word(key) })),
+          onlyWhen(
+            forAppliance(
+              ({ hero, found }, data) =>
+                laidOut('full')(data) &&
+                hero === 'cold' &&
+                (!found || found.entities.boosts.length > 0),
+            ),
+            fieldRow(
+              boolField('show_modes'),
+              onlyWhen(
+                ({ show_modes }) => show_modes === true,
+                choiceField('modes_style', [option('chips'), option('tiles')]),
+              ),
+            ),
           ),
-          boolField('show_maintenance'),
+          onlyWhen(
+            forAppliance(
+              ({ hero, found }, data) =>
+                laidOut('full')(data) &&
+                hero === 'cold' &&
+                data['show_modes'] === true &&
+                (!found || found.entities.boosts.length > 0),
+            ),
+            orderedField(
+              'modes',
+              BOOST_KEYS.map((key) => ({ value: key, label: editorWord(`appliance.mode_${key}`) })),
+            ),
+          ),
+          onlyWhen(
+            forAppliance(({ kind }, data) => laidOut('full')(data) && kind === 'coffee'),
+            boolField('show_drinks'),
+          ),
+          onlyWhen(
+            forAppliance(
+              ({ kind }, data) =>
+                laidOut('full')(data) && kind === 'coffee' && data['show_drinks'] !== false,
+            ),
+            orderedField('drinks', [], { custom: true }),
+          ),
+          // a meal's amount, where the feeder takes one from the card
+          onlyWhen((data) => data['feed_amount'] !== undefined, numberField('feed_amount', 1, 400)),
+          // a second drum or cavity: its line (compact, ring) or its row (the whole card)
+          onlyWhen(
+            forAppliance(
+              ({ hero, found }, data) =>
+                !laidOut('row')(data) &&
+                (found ? found.entities.twin !== undefined : hero === 'cycle' || hero === 'heat'),
+            ),
+            choiceField('unit', [
+              ['both', 'appliance.o_both_units'],
+              ['main', 'appliance.o_main_unit'],
+              ['sub', 'appliance.o_sub_unit'],
+            ]),
+          ),
+          onlyWhen(
+            laidOut('full'),
+            fieldRow(
+              boolField('show_rows'),
+              onlyWhen(
+                ({ show_rows }) => show_rows !== false,
+                choiceField('row_values', [
+                  ['inline', 'appliance.o_inline'],
+                  ['end', 'appliance.o_at_end'],
+                  option('plain'),
+                ]),
+              ),
+            ),
+          ),
+          // the compact card's readouts: a pet device's are its tiles
+          onlyWhen(
+            forAppliance(({ hero }, data) => laidOut('compact')(data) && hero !== 'pet'),
+            orderedField(
+              'readouts',
+              APPLIANCE_READOUTS.map((key) => ({ value: key, label: word(key) })),
+            ),
+          ),
+        ]),
+        // its buttons, of what the appliance can do at all, and what asks first
+        sectionField('appliance.section_buttons', [
           fieldRow(
-            boolField('show_modes'),
-            choiceField('modes_style', [option('chips'), option('tiles')]),
+            onlyWhen(
+              (data, hass) =>
+                !laidOut('row')(data) && controllable(data as ApplianceCardConfig, hass).length > 0,
+              boolField('show_controls'),
+            ),
+            onlyWhen(
+              forAppliance(
+                ({ found }, data) =>
+                  laidOut('full')(data) &&
+                  (!found || Boolean(found.entities.roles.program?.startsWith('select.'))),
+              ),
+              boolField('show_programs'),
+            ),
           ),
-          orderedField(
-            'modes',
-            BOOST_KEYS.map((key) => ({ value: key, label: editorWord(`appliance.mode_${key}`) })),
-          ),
-          fieldRow(boolField('show_controls'), boolField('show_programs')),
-          orderedField(
-            'controls',
-            COMMAND_NAMES.map((key) => ({ value: key, label: editorWord(`appliance.${key}`) })),
+          // the row draws no buttons: its round is the first of them that can act
+          onlyWhen(
+            (data, hass) =>
+              (laidOut('row')(data) || data['show_controls'] === true) &&
+              controllable(data as ApplianceCardConfig, hass).length > 0,
+            orderedField(
+              'controls',
+              COMMAND_NAMES.map((key) => ({ value: key, label: editorWord(`appliance.${key}`) })),
+            ),
           ),
           // what asks first (#120), of what the appliance can send
           onlyWhen(
             (data, hass) => confirmable(data as ApplianceCardConfig, hass).length > 0,
             confirmField(),
           ),
-          // a meal's amount, where the feeder takes one from the card
-          onlyWhen((data) => data['feed_amount'] !== undefined, numberField('feed_amount', 1, 400)),
         ]),
+        // what it says needs a hand, and when
         sectionField('appliance.section_reminders', [
-          fieldRow(boolField('unload_reminder'), numberField('unload_after', 0, 720)),
-          fieldRow(numberField('done_for', 0, 1440), numberField('door_alert', 0, 3600)),
-          numberField('low_level', 0, 100),
+          onlyWhen(
+            forAppliance(
+              ({ found }, data) => laidOut('compact', 'ring')(data) && reminds(found, data),
+            ),
+            boolField('show_maintenance'),
+          ),
+          onlyWhen(
+            forAppliance(({ found }, data) => reminds(found, data)),
+            numberField('low_level', 0, 100),
+          ),
           onlyWhen((data, hass) => petCard(data, hass), numberField('low_days', 0, 90)),
+          onlyWhen(
+            forAppliance(({ kind }) => unloads(kind)),
+            fieldRow(
+              boolField('unload_reminder'),
+              onlyWhen(
+                ({ unload_reminder }) => unload_reminder !== false,
+                numberField('unload_after', 0, 720),
+              ),
+            ),
+          ),
+          fieldRow(
+            onlyWhen(
+              forAppliance(({ hero }) => FINISHES.includes(hero)),
+              numberField('done_for', 0, 1440),
+            ),
+            onlyWhen(
+              forAppliance(
+                ({ kind, hero, found }) =>
+                  hero === 'cold' ||
+                  (found ? found.entities.roles.door !== undefined : DOORS.includes(kind)),
+              ),
+              numberField('door_alert', 0, 3600),
+            ),
+          ),
         ]),
-        sectionField('appliance.section_plug', [
-          fieldRow(numberField('running_power', 1, 3000), numberField('finished_after', 1, 120)),
+        // a plug's cycle, read from what it draws
+        onlyWhen(
+          forAppliance(({ hero }) => hero === 'plug'),
+          sectionField('appliance.section_plug', [
+            fieldRow(numberField('running_power', 1, 3000), numberField('finished_after', 1, 120)),
+          ]),
+        ),
+        sectionField('appliance.section_look', [
+          fieldRow(toneField(), accentField()),
+          accentField('card_color', { none: true }),
+          cardOpacityField(),
+          unavailableField(),
         ]),
-        fieldRow(toneField(), accentField()),
-        accentField('card_color', { none: true }),
-        cardOpacityField(),
-        unavailableField(),
-        actionFields(),
+        sectionField('appliance.section_actions', [actionFields()]),
         // drawn in the roles' section; `device: none` has no device to search
         onlyWhen(({ device }) => device !== NO_DEVICE, {
           ...boolField('scan'),
@@ -5159,7 +5340,7 @@ function confirmable(
   config: ApplianceCardConfig,
   hass: HomeAssistant | undefined,
 ): readonly ConfirmName[] {
-  const found = hass ? findAppliance(hass, config) : undefined;
+  const found = hass ? foundFor(config, hass) : undefined;
   if (!found || !Object.keys(found.entities.roles).length) return CONFIRM_NAMES;
   const { platform, entities } = found;
   return CONFIRM_NAMES.filter((name) =>
@@ -5442,6 +5623,143 @@ function rowsList(key: 'rows' | 'tiles', title: MessageKey): RowsListSpec {
 /** Whether the editor's card is a pet device's (its tiles and its days are offered then). */
 const petCard = (data: Readonly<Record<string, unknown>>, hass?: HomeAssistant): boolean =>
   isPet(kindFor(data as ApplianceCardConfig, hass));
+
+/* ---------- which settings act on the editor's appliance ---------- */
+
+/** The heroes that finish (a cycle, a heat, a plug's cycle): the bell beside their figures, how long "Done" stays. */
+const FINISHES: readonly Hero[] = ['cycle', 'heat', 'plug'];
+/** The heroes whose whole card draws figures (or a pet device's tiles) that `show_hero` switches off. */
+const FIGURES: readonly Hero[] = ['cycle', 'heat', 'plug', 'pet'];
+/** The kinds with a door to stand open, where nothing of the appliance is found to say whether it has one. */
+const DOORS: readonly ApplianceKind[] = [
+  'washer',
+  'dryer',
+  'washer_dryer',
+  'dishwasher',
+  'oven',
+  'microwave',
+  'fridge',
+  'freezer',
+  'wine',
+];
+
+/** A `when` of the layout alone: the card's own, else its kind's. */
+function laidOut(
+  ...layouts: readonly ApplianceVariant[]
+): (data: Readonly<Record<string, unknown>>) => boolean {
+  return (data) => layouts.includes(variantOf(data as LovelaceCardConfig));
+}
+
+/** The appliance the editor is about, as its settings read it. */
+interface Edited {
+  readonly kind: ApplianceKind;
+  /** The hero it draws: its kind's, or a plug's where nothing but a switch and its power say what it does. */
+  readonly hero: Hero;
+  /** What its device has; none where nothing of an appliance is found yet (none picked, or out of the house). */
+  readonly found: ApplianceFound | undefined;
+}
+
+/** The appliance as an editor's form asks it: once for every field of the form as it stands (one config, one house). */
+const editedOnce = new WeakMap<
+  object,
+  { readonly hass: HomeAssistant | undefined; readonly edited: Edited | undefined }
+>();
+
+/**
+ * What the editor's appliance is: its kind as the card reads it, its hero, what its device has. Unknown (none) where
+ * the editor has no house to ask and the config names no kind: every setting is offered then.
+ */
+function editedOf(
+  data: Readonly<Record<string, unknown>>,
+  hass: HomeAssistant | undefined,
+): Edited | undefined {
+  const kept = editedOnce.get(data);
+  if (kept && kept.hass === hass) return kept.edited;
+  const config = data as ApplianceCardConfig;
+  const named = config.kind && config.kind !== 'auto' ? config.kind : undefined;
+  const all = hass ? foundFor(config, hass) : undefined;
+  const found = all && Object.keys(all.entities.roles).length ? all : undefined;
+  const kind =
+    named ??
+    (all ? (all.verdict && 'kind' in all.verdict ? all.verdict.kind : 'appliance') : undefined);
+  const edited =
+    kind === undefined
+      ? undefined
+      : {
+          kind,
+          hero: found && isPlug(found.entities.roles) ? 'plug' : KIND_DEFAULTS[kind].hero,
+          found,
+        };
+  editedOnce.set(data, { hass, edited });
+  return edited;
+}
+
+/**
+ * A field's `when` asked of the editor's appliance (`editedOf`), its config and the house: offered wherever the editor
+ * cannot tell what the appliance is.
+ */
+function forAppliance(
+  test: (
+    appliance: Edited,
+    data: Readonly<Record<string, unknown>>,
+    hass: HomeAssistant | undefined,
+  ) => boolean,
+): NonNullable<HaFormSchemaItem['when']> {
+  return (data, hass) => {
+    const appliance = editedOf(data, hass);
+    return appliance ? test(appliance, data, hass) : true;
+  };
+}
+
+/** Whether an appliance has reminders to say: any its device has, any the card names; every one where none is found. */
+function reminds(
+  found: ApplianceFound | undefined,
+  data: Readonly<Record<string, unknown>>,
+): boolean {
+  return !found || found.entities.maintenance.length > 0 || listed(data, 'maintenance').length > 0;
+}
+
+/** An appliance as found for its editor: once a config and a house (its form asks every field with the same). */
+const foundOnce = new WeakMap<
+  object,
+  { readonly hass: HomeAssistant | undefined; readonly found: ApplianceFound }
+>();
+function foundFor(config: ApplianceCardConfig, hass: HomeAssistant): ApplianceFound {
+  const kept = foundOnce.get(config);
+  if (kept && kept.hass === hass) return kept.found;
+  const found = findAppliance(hass, config);
+  foundOnce.set(config, { hass, found });
+  return found;
+}
+
+/**
+ * The buttons a card may draw (`controls`): those its appliance can do at all, as its integration and its roles let a
+ * card, whatever its entities say now; every one where nothing of an appliance is found.
+ */
+function controllable(
+  config: ApplianceCardConfig,
+  hass: HomeAssistant | undefined,
+): readonly CommandName[] {
+  const found = hass ? foundFor(config, hass) : undefined;
+  if (!found || !Object.keys(found.entities.roles).length) return COMMAND_NAMES;
+  const { platform, entities } = found;
+  return COMMAND_NAMES.filter((name) =>
+    CONTROL_ACTIONS[name].some((action) => canAtAll(hass, platform, entities.roles, action)),
+  );
+}
+
+/** The buttons the editor offers, in their order: those the appliance can do, and any its config names already. */
+function controlChoices(
+  config: ApplianceCardConfig,
+  hass: HomeAssistant | undefined,
+): ReadonlyArray<{ readonly value: string; readonly label: string }> {
+  const can = controllable(config, hass);
+  const named = Array.isArray(config.controls) ? config.controls : [];
+  return COMMAND_NAMES.filter((key) => can.includes(key) || named.includes(key)).map((key) => ({
+    value: key,
+    label: editorWord(`appliance.${key}`),
+  }));
+}
 
 /** A feeder's meal amount for the editor, where it takes one from the card: the card's, else its smallest. */
 function feedAmountOf(

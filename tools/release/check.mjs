@@ -58,7 +58,8 @@ const BUDGETS = {
   // the cameras' sheet: fetched when a Cameras card's round opens it
   'cameras-sheet': 8192,
   // the appliances family: the washer, the dryer, the dishwasher and their kin, plug mode, the pet devices, their
-  // English. 66 KB since 2026-11-06 (1.15, #120, 0.9 KB: which commands ask first and their words, the DE1's call for a
+  // English. 67 KB since 2026-11-10 (1.1 KB: the card's editor in sections, each setting offered where it acts — by the
+  // appliance's kind, its hero and its layout — and the buttons offered those the appliance can do); 66 KB since 2026-11-06 (1.15, #120, 0.9 KB: which commands ask first and their words, the DE1's call for a
   // hand and its failure in the house's words, its plugin's prefix, its tank and its drinks out of reach, each card's
   // own opacity); 64 KB since 2026-11-04 (1.14, #115, 0.7 KB: a device of any integration read by its own words, a DE1's
   // camel-cased states, counters and tank, hcpy's keys run together; the editor's roles by kind, its lists offering
@@ -73,7 +74,7 @@ const BUDGETS = {
   // finishes and asks before it is switched off, the compact line's shorter forms); 51 since the reporter's LG house
   // (#47: LG's older integration read by its device sensor's attributes, both LG integrations known by their
   // signatures, LG's states and cycles worded in eight languages); 48 before
-  appliances: 67_584,
+  appliances: 68_608,
   // the appliances' pictures: one product drawing a kind, fetched by the first card that draws one
   'appliance-art': 32_768,
   // the automations family: the card, the schedule model and its store. 20 KB since 1.9 (the family's English, the

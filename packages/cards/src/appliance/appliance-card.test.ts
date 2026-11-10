@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import {
   ensureLanguage,
+  type HaFormSchemaItem,
   type HassEntity,
   type HomeAssistant,
   type LovelaceCardConfig,
@@ -8,6 +9,8 @@ import {
 import { OUT_OF_REACH, outOfReachStates } from '@fluvy/demo-home/out-of-reach';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { applianceHeight, APPLIANCE_VARIANTS } from '../appliances-family.js';
+import { visibleFields } from '../shared/form.js';
+import { editorDefaults } from '../shared/rows-editor.js';
 import { applianceHouseHeight, FluvyApplianceCard } from './appliance-card.js';
 import { appliancesHouseHeight, FluvyAppliancesCard } from './appliances-card.js';
 import {
@@ -1567,6 +1570,138 @@ describe('the whole card’s standard slot (#47)', () => {
 describe('the appliance card’s editor', () => {
   beforeEach(() => {
     document.documentElement.lang = 'en';
+  });
+
+  /**
+   * What the editor shows of an appliance as it stands, as a person sees it: its fields at the top, each section by its
+   * title and its fields, and its lists.
+   */
+  const editor = (
+    config: Record<string, unknown>,
+    hass: HomeAssistant = house(),
+  ): { readonly form: Record<string, string[]>; readonly lists: string[] } => {
+    const form = FluvyApplianceCard.getConfigForm();
+    const card = { type: 'custom:fluvy-appliance-card', ...config };
+    const asked = { ...editorDefaults(form, FluvyApplianceCard.defaults)?.(card, hass), ...card };
+    const names = (items: readonly HaFormSchemaItem[]): string[] =>
+      items.flatMap((item) => (item.schema ? names(item.schema) : [item.name]));
+    const shown: Record<string, string[]> = {};
+    for (const item of visibleFields(form.schema, asked, hass)) {
+      const title = item.type === 'expandable' ? String(item.title) : '';
+      shown[title] = [...(shown[title] ?? []), ...names(item.schema ?? [item])];
+    }
+    const lists = (FluvyApplianceCard.lists ?? [])
+      .filter((list) => list.when?.(asked, hass) ?? true)
+      .map((list) => list.key);
+    return { form: shown, lists };
+  };
+
+  it('keeps its settings in sections, each offering only what acts on the appliance and its layout', () => {
+    // Home Connect's dishwasher, its whole card: its cycle's steps and times, its programmes, its salt and its door
+    expect(editor({ device: 'hc-dish' }).form).toEqual({
+      '': ['device', 'entity', 'kind', 'variant', 'name', 'icon', 'scan'],
+      Header: ['picture', 'image', 'picture_min', 'show_power', 'power_action', 'show_notify'],
+      'What it shows': [
+        'show_hero',
+        'show_progress',
+        'progress_style',
+        'time',
+        'show_rows',
+        'row_values',
+      ],
+      Buttons: ['show_controls', 'show_programs', 'confirm'],
+      Reminders: ['low_level', 'unload_reminder', 'unload_after', 'done_for', 'door_alert'],
+      Appearance: ['tone', 'color', 'card_color', 'card_opacity', 'unavailable'],
+      Interactions: ['tap_action', 'hold_action'],
+    });
+    expect(editor({ device: 'hc-dish' }).lists).toEqual(['rows', 'maintenance', 'roles']);
+    // a fridge: its compartments and its quick modes, its door; nothing it could be told to do, no buttons
+    const fridge = editor({ device: 'miele-fridge' });
+    expect(fridge.form['What it shows']).toEqual([
+      'show_zones',
+      'setpoint_style',
+      'show_modes',
+      'show_rows',
+      'row_values',
+    ]);
+    expect(fridge.form['Buttons']).toBeUndefined();
+    expect(fridge.form['Reminders']).toEqual(['door_alert']);
+    expect(fridge.lists).toEqual(['rows', 'zones', 'roles']);
+    // an oven: its heat and its target's stepper, no steps to its cycle, nothing to unload
+    const oven = editor({ device: 'hc-oven' });
+    expect(oven.form['What it shows']).toEqual([
+      'show_hero',
+      'show_progress',
+      'time',
+      'setpoint_style',
+      'show_rows',
+      'row_values',
+    ]);
+    expect(oven.form['Reminders']).toEqual(['done_for']);
+    // a coffee machine: its drinks, never a cycle's figures
+    expect(editor({ device: 'hc-coffee' }).form['What it shows']).toEqual([
+      'show_drinks',
+      'drinks',
+      'show_rows',
+      'row_values',
+    ]);
+    // a washer on a plug: what it draws says its cycle, the plug's own section with it
+    const plug = editor({ device: 'plug-washer' });
+    expect(plug.form['On a smart plug']).toEqual(['running_power', 'finished_after']);
+    expect(plug.form['What it shows']).toEqual(['show_hero', 'show_rows', 'row_values']);
+    expect(editor({ device: 'lg-washer' }).form['On a smart plug']).toBeUndefined();
+    // a pet device named by hand: its tiles, its meal amount's days, never a cycle's
+    const feeder = editor({ device: 'none', kind: 'feeder' });
+    expect(feeder.form['What it shows']).toEqual(['show_hero', 'show_rows', 'row_values']);
+    expect(feeder.form['Reminders']).toEqual(['low_level', 'low_days']);
+    expect(feeder.lists).toEqual(['rows', 'tiles', 'maintenance', 'roles']);
+  });
+
+  it('offers each layout what it draws: the compact head’s circle and readouts, the row’s round and its buttons', () => {
+    const compact = editor({ device: 'lg-washer', variant: 'compact' });
+    expect(compact.form['Header']).toEqual(['show_icon']);
+    expect(compact.form['What it shows']).toEqual([
+      'show_progress',
+      'progress_style',
+      'time',
+      'readouts',
+    ]);
+    expect(compact.lists).toEqual(['sensors', 'roles']);
+    // the row draws no buttons, but its round is the first of them that can act: their order is offered alone
+    const row = editor({ device: 'lg-washer', variant: 'row' });
+    expect(row.form['Header']).toEqual([
+      'picture',
+      'image',
+      'picture_min',
+      'show_power',
+      'power_action',
+    ]);
+    expect(row.form['What it shows']).toEqual(['time']);
+    expect(row.form['Buttons']).toEqual(['controls', 'confirm']);
+    expect(row.lists).toEqual(['roles']);
+    // a setting that depends on another follows it: the buttons' order once they show, the drawing's photo
+    expect(editor({ device: 'lg-washer', show_controls: true }).form['Buttons']).toEqual([
+      'show_controls',
+      'controls',
+      'confirm',
+    ]);
+    expect(editor({ device: 'lg-washer', picture: 'icon' }).form['Header']).not.toContain('image');
+  });
+
+  it('offers the buttons an appliance can do, and any its config names already', () => {
+    const offered = (config: Record<string, unknown>) =>
+      (FluvyApplianceCard.choices?.({ type: 'x', ...config }, house())['controls'] ?? []).map(
+        (option) => option.value,
+      );
+    expect(offered({ device: 'hc-oven' })).toEqual(['stop', 'power', 'light']);
+    expect(offered({ device: 'hc-oven', controls: ['start'] })).toEqual([
+      'start',
+      'stop',
+      'power',
+      'light',
+    ]);
+    // nothing of an appliance found yet: every one
+    expect(offered({})).toHaveLength(9);
   });
 
   it('offers every device an appliance can live on, whatever its integration: an MQTT one, a pet device (#115)', () => {

@@ -5,6 +5,16 @@ and the versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Visible on upgrade
+
+- The appliance card's editor is in sections, each folded until opened — Header, What it shows, Buttons, Reminders,
+  On a smart plug, Appearance and Interactions — under the appliance, its kind, its layout and its name, and each
+  offers only what acts on the appliance and its layout: a fridge its compartments, its quick modes and its door, no
+  buttons it could not press; a coffee machine its drinks; an oven its target's stepper; a washer its steps and its
+  unload reminder; a plug's appliance its watts; the compact layout its circle and readouts, the row its round and the
+  order of its buttons. The buttons offered are those the appliance can do. The rows, the tiles, the readouts of one's
+  own, the reminders and the compartments are offered where the card draws them.
+
 ### Fixed
 
 - A section of a card's editor keeps its title over the fields it has left where one of them does not apply, and
