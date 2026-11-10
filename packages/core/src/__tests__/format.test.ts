@@ -156,7 +156,7 @@ describe('stateText', () => {
     expect(stateText(en, resolveEntity(en, 'sensor.x'))).toBe('Unknown');
     // a language Fluvy speaks says it its own way; one it does not falls back to English
     const de = make('de', 'language', 'unavailable');
-    expect(stateText(de, resolveEntity(de, 'sensor.x'))).toBe('Offline');
+    expect(stateText(de, resolveEntity(de, 'sensor.x'))).toBe('Nicht verfügbar');
     const sv = make('sv', 'language', 'unavailable');
     expect(stateText(sv, resolveEntity(sv, 'sensor.x'))).toBe('Unavailable');
   });
